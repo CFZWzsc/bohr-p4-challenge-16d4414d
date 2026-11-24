@@ -13,6 +13,20 @@ description: Use when a manuscript's reasoning must be audited, requiring recons
 
 **不适用**：形式逻辑证明、统计重算、查重、替作者重写全文、判断研究价值。
 
+## Quickstart
+
+包内自带一个合成演示案例，可直接跑通：
+
+```powershell
+python scripts/run_skill.py --case examples/demo-case/case.json --out "$env:TEMP\demo_16d4414d\result.json" --work "$env:TEMP\demo_16d4414d\work"
+```
+
+- 演示输入：`examples/demo-case/case.json`，5 章节合成稿件（横断面设计，却在讨论中写 "therefore causes … in all adults"）。
+- 输出：`$env:TEMP\demo_16d4414d\result.json`，`status=success`，4 条 findings（1 high / 3 medium），`verdict.decision=major_revision`。
+- `output_contract` 的 `issues`、`summary`、`verdict` 三个键均非空；同一输入连续两次运行的 result.json 字节一致。
+
+> 案例文本为合成内容，不代表任何真实论文或官方评测数据。
+
 ## 输入
 
 | 输入 | 说明 |
