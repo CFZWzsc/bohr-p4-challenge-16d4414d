@@ -1,0 +1,15 @@
+{
+  "case_id": "demo-argument-chain-01",
+  "output_contract": {
+    "issues": "array",
+    "summary": "object",
+    "verdict": "string"
+  },
+  "manuscript": {
+    "Introduction": "Stroke prevention is a public-health priority. This study aims to test whether coffee intake reduces stroke risk in adults.",
+    "Methods": "A cross-sectional survey of 400 adults recorded coffee intake and self-reported stroke history in one hospital.",
+    "Results": "Coffee intake was associated with lower stroke risk (OR 0.8, 95% CI 0.6-0.9).",
+    "Discussion": "Coffee therefore causes a reduction in stroke risk in all adults.",
+    "Conclusion": "Coffee reduces stroke risk."
+  }
+}
