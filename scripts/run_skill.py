@@ -299,10 +299,22 @@ def build_payload(case, task_text):
             "Checked for alternative explanations and an explicit hypothesis verdict.",
         ],
     }
+    checks = []
+    for facet, label in FACET_LABELS:
+        hits = [item for item in findings if item.get("facet") == facet]
+        checks.append({"check": label, "facet": facet,
+                       "status": "finding" if hits else "no_issue_found",
+                       "findings": len(hits),
+                       "basis": "cue-based scan of the supplied sections"})
+    result["checks"] = checks
+
     return {
         "case_id": case_identifier(case),
         "status": status,
         "result": result,
+        "checks": checks,
+        "review_report": {"format": "markdown",
+                          "content": build_review_report(result, case_identifier(case), uncertainty)},
         "evidence": [{"kind": "finding", "locator": item["locator"], "quote": item["quote"], "severity": item["severity"]} for item in findings],
         "uncertainty": uncertainty,
         "errors": [],
@@ -423,6 +435,10 @@ def apply_contract(payload, case):
         if name in payload and payload[name] is not None:
             notes[name] = "produced directly by this run"
             continue
+        if name in flat and flat[name] not in (None, "", [], {}):
+            payload[name] = flat[name]
+            notes[name] = "taken from the run's result section"
+            continue
         value, reason = _derive_named(name, flat)
         if value is not None:
             payload[name] = value
@@ -448,6 +464,57 @@ def write_json(path, payload):
     finally:
         if os.path.exists(tmp):
             os.unlink(tmp)
+
+
+FACET_LABELS = [
+    ("argument_chain", "论点-证据链完整性"),
+    ("causal_inference", "因果措辞与设计匹配"),
+    ("generalization", "结论外推范围"),
+    ("alternative_explanations", "替代解释与混杂"),
+]
+
+
+def build_review_report(result, case_id, uncertainty=None):
+    """Render a complete review report (markdown) from this run's findings."""
+    findings = result.get("findings") or []
+    summary = result.get("summary") or {}
+    counts = summary.get("by_severity") or {}
+    lines = ["# 论文论证与逻辑审查报告", "",
+             "- case_id: `%s`" % (case_id or "unknown"),
+             "- 判定: %s" % (summary.get("verdict") or "no_verdict"),
+             "- 问题数: %d（high %d / medium %d / low %d）" % (
+                 len(findings), counts.get("high", 0), counts.get("medium", 0), counts.get("low", 0)),
+             "- 检测章节: %s" % ("、".join(result.get("sections_detected") or []) or "未识别"), ""]
+    lines += ["## 一、检查覆盖", "", "| 检查项 | 状态 | 问题数 |", "|---|---|---:|"]
+    for check in result.get("checks") or []:
+        lines.append("| %s | %s | %s |" % (check.get("check"), check.get("status"), check.get("findings", 0)))
+    lines += ["", "## 二、问题清单"]
+    if not findings:
+        lines += ["", "本次材料在已检查项上未发现问题；未检查项见第五节。"]
+    for index, item in enumerate(findings, 1):
+        lines += ["", "### F%d [%s] %s" % (index, item.get("severity", "unspecified"), item.get("facet", "finding")), "",
+                  "- 定位：`%s`" % (item.get("locator") or "未定位")]
+        if item.get("quote"):
+            lines.append("- 原文：“%s”" % item["quote"])
+        lines += ["- 判定：%s" % (item.get("finding") or ""),
+                  "- 依据：%s" % (item.get("evidence") or ""),
+                  "- 修改建议：%s" % (item.get("recommendation") or "")]
+    lines += ["", "## 三、修改清单"]
+    for index, item in enumerate(result.get("revision_checklist") or [], 1):
+        lines.append("%d. `%s` — %s" % (index, item.get("locator") or "n/a", item.get("action") or ""))
+    lines += ["", "## 四、限制"]
+    for item in result.get("limitations") or []:
+        lines.append("- %s" % item)
+    lines += ["", "## 五、待复核与未检查项"]
+    for item in (uncertainty or []):
+        if isinstance(item, dict):
+            lines.append("- %s：%s" % (item.get("type", "uncertainty"), item.get("detail", "")))
+        else:
+            lines.append("- %s" % item)
+    lines += ["", "## 六、运行记录"]
+    for item in result.get("change_log") or []:
+        lines.append("- %s" % item)
+    return "\n".join(lines)
 
 
 def main(argv=None):
@@ -480,6 +547,13 @@ def main(argv=None):
     except Exception as exc:
         sys.stderr.write(json.dumps({"status": "failed", "stage": "write_output", "message": str(exc)[:300]}) + "\n")
         return 3
+    report = payload.get("review_report")
+    if isinstance(report, dict) and report.get("content"):
+        try:
+            with open(os.path.join(os.path.dirname(os.path.abspath(args.out)), "review-report.md"), "w", encoding="utf-8") as handle:
+                handle.write(report["content"])
+        except OSError:
+            pass
     sys.stdout.write(json.dumps({"status": payload.get("status"), "case_id": payload.get("case_id"),
                                  "out": str(args.out), "findings": payload.get("stats", {}).get("findings", 0)},
                                 ensure_ascii=False) + "\n")
